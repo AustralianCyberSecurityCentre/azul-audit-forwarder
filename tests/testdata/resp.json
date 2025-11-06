@@ -1,0 +1,148 @@
+{
+  "status": "success",
+  "data": {
+    "resultType": "streams",
+    "result": [
+      {
+        "stream": {
+          "app": "restapi-server-audit",
+          "client_ip": "127.0.0.6",
+          "client_port": "53841",
+          "connection": "-",
+          "duration_ms": "25.69890022277832",
+          "filename": "/logs/restapi-audit.log",
+          "full_time": "12/Apr/2024:10:00:47.513681",
+          "method": "POST",
+          "path": "/api/v0/binaries/form",
+          "referer": "-",
+          "status": "200",
+          "user_agent": "python-httpx/0.27.0",
+          "username": "FAKE_USER"
+        },
+        "values": [
+          [
+            "1712916047579746687",
+            "full_time=12/Apr/2024:10:00:47.513681 client_ip=127.0.0.6 client_port=53841 connection=- username=FAKE_USER method=POST path=/api/v0/binaries/form status=200 user_agent=\"python-httpx/0.27.0\" referer=- duration_ms=25.69890022277832"
+          ]
+        ]
+      },
+      {
+        "stream": {
+          "app": "restapi-server-audit",
+          "client_ip": "127.0.0.6",
+          "client_port": "37439",
+          "connection": "-",
+          "duration_ms": "35.00032424926758",
+          "filename": "/logs/restapi-audit.log",
+          "full_time": "12/Apr/2024:10:00:47.158444",
+          "method": "POST",
+          "path": "/api/v0/binaries/source",
+          "referer": "-",
+          "status": "200",
+          "user_agent": "python-httpx/0.27.0",
+          "username": "FAKE_USER"
+        },
+        "values": [
+          [
+            "1712916047198447525",
+            "full_time=12/Apr/2024:10:00:47.158444 client_ip=127.0.0.6 client_port=37439 connection=- username=FAKE_USER method=POST path=/api/v0/binaries/source status=200 user_agent=\"python-httpx/0.27.0\" referer=- duration_ms=35.00032424926758"
+          ]
+        ]
+      }
+    ],
+    "stats": {
+      "summary": {
+        "bytesProcessedPerSecond": 131259,
+        "linesProcessedPerSecond": 516,
+        "totalBytesProcessed": 8390,
+        "totalLinesProcessed": 33,
+        "execTime": 0.063919,
+        "queueTime": 0.035878,
+        "subqueries": 0,
+        "totalEntriesReturned": 2,
+        "splits": 1,
+        "shards": 16,
+        "totalPostFilterLines": 29,
+        "totalStructuredMetadataBytesProcessed": 0
+      },
+      "querier": {
+        "store": {
+          "totalChunksRef": 0,
+          "totalChunksDownloaded": 0,
+          "chunksDownloadTime": 0,
+          "chunk": {
+            "headChunkBytes": 0,
+            "headChunkLines": 0,
+            "decompressedBytes": 0,
+            "decompressedLines": 0,
+            "compressedBytes": 0,
+            "totalDuplicates": 0,
+            "postFilterLines": 0,
+            "headChunkStructuredMetadataBytes": 0,
+            "decompressedStructuredMetadataBytes": 0
+          }
+        }
+      },
+      "ingester": {
+        "totalReached": 16,
+        "totalChunksMatched": 1,
+        "totalBatches": 16,
+        "totalLinesSent": 2,
+        "store": {
+          "totalChunksRef": 0,
+          "totalChunksDownloaded": 0,
+          "chunksDownloadTime": 0,
+          "chunk": {
+            "headChunkBytes": 8390,
+            "headChunkLines": 33,
+            "decompressedBytes": 0,
+            "decompressedLines": 0,
+            "compressedBytes": 0,
+            "totalDuplicates": 0,
+            "postFilterLines": 29,
+            "headChunkStructuredMetadataBytes": 0,
+            "decompressedStructuredMetadataBytes": 0
+          }
+        }
+      },
+      "cache": {
+        "chunk": {
+          "entriesFound": 0,
+          "entriesRequested": 0,
+          "entriesStored": 0,
+          "bytesReceived": 0,
+          "bytesSent": 0,
+          "requests": 0,
+          "downloadTime": 0
+        },
+        "index": {
+          "entriesFound": 0,
+          "entriesRequested": 0,
+          "entriesStored": 0,
+          "bytesReceived": 0,
+          "bytesSent": 0,
+          "requests": 0,
+          "downloadTime": 0
+        },
+        "result": {
+          "entriesFound": 0,
+          "entriesRequested": 0,
+          "entriesStored": 0,
+          "bytesReceived": 0,
+          "bytesSent": 0,
+          "requests": 0,
+          "downloadTime": 0
+        },
+        "statsResult": {
+          "entriesFound": 0,
+          "entriesRequested": 0,
+          "entriesStored": 0,
+          "bytesReceived": 0,
+          "bytesSent": 0,
+          "requests": 0,
+          "downloadTime": 0
+        }
+      }
+    }
+  }
+}
