@@ -1,10 +1,12 @@
 """Settings classes using pydantic environment parsing."""
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AuditFwdSettings(BaseSettings):
     """AuditForwarder specific environment variables parsed into settings object."""
+
+    model_config = SettingsConfigDict(env_prefix="audit_")
 
     # location of loki server
     loki_host: str = "http://localhost:3100"
@@ -24,14 +26,13 @@ class AuditFwdSettings(BaseSettings):
     health_host: str = "0.0.0.0"  # nosec
     health_port: int = 8855
 
-    class Config:
-        """Prefix override."""
-
-        env_prefix = "audit_"
+    http_client_timeout_seconds: float = 30.0
 
 
 class Logging(BaseSettings):
     """Logger configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="logger_")
 
     log_file: str = "/tmp/azul_audit_forwarder.log"  # nosec
     log_format: str = (
@@ -41,11 +42,6 @@ class Logging(BaseSettings):
     log_level: str = "info"
     log_retention: str = "1 months"
     log_rotation: str = "daily"
-
-    class Config:
-        """Config class."""
-
-        env_prefix = "logger_"
 
 
 st = AuditFwdSettings()
