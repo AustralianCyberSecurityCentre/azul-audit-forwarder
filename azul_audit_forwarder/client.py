@@ -163,6 +163,7 @@ def poll_for_logs() -> int | None:
         loki_endpoint = f"{loki_host}/loki/api/v1/query_range"
         logger.debug(f"Querying {loki_endpoint} for {format(start_epoch)} to" f" {format(end_epoch)}")
 
+        resp = None
         try:
             resp = httpx.get(url=loki_endpoint, params=params, timeout=settings.st.http_client_timeout_seconds)
             if resp.status_code == 200:
@@ -179,7 +180,8 @@ def poll_for_logs() -> int | None:
             # Catch connection errors
             logger.error(f"Error connecting to: {loki_endpoint}")
             logger.error(params)
-            logger.error(f"{resp.content}")
+            if resp:
+                logger.error(f"{resp.content}")
             logger.error(f"Error: {ex}")
             _set_healthy(False)
             return None
