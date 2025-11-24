@@ -14,7 +14,7 @@ state = {}
 
 
 @app.get("/info")
-async def post_audit(request: Request, response: Response) -> dict:
+async def get_info(request: Request, response: Response) -> dict:
     global state
     return state
 
