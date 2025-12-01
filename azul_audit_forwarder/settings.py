@@ -19,7 +19,7 @@ class AuditFwdSettings(BaseSettings):
     cloudwatch_aws_access_key_id: str = "test"
     # AWS Secret Access Key for CloudWatch
     cloudwatch_aws_secret_access_key: str = "test"
-    custom_aws_endpoint: str | None = "http://localhost:4566" # TODO: set to None
+    custom_aws_endpoint: str | None = "http://localhost:4566"  # TODO: set to None
 
     # location of loki server
     loki_host: str = "http://localhost:3100"

@@ -10,7 +10,7 @@ import os.path
 import re
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 
 import boto3
 import click
@@ -143,10 +143,11 @@ def send_logs_to_cloudwatch(last_epoch: int):
                 log_events.append({"timestamp": timestamp, "message": log_line.strip()})
 
         if not log_events:
-            logger.info("No log events to send to CloudWatch.")
+            logger.debug("No log events to send to CloudWatch.")
             return
 
         try:
+            # Sort log events by timestamp
             log_events.sort(key=lambda x: x["timestamp"])
             response = cloudwatch_client.put_log_events(
                 logGroupName=log_group, logStreamName=log_stream, logEvents=log_events
@@ -157,7 +158,7 @@ def send_logs_to_cloudwatch(last_epoch: int):
         except (BotoCoreError, ClientError) as e:
             logger.error(f"Error sending logs to CloudWatch: {e}")
     else:
-        logger.info("No logs to send to CloudWatch.")
+        logger.debug("No logs to send to CloudWatch.")
 
     clear_output()
 
