@@ -7,13 +7,16 @@ Sends logs to a specified destination at a configurable interval.
 import copy
 import io
 import os.path
+import re
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
+import boto3
 import click
 import httpx
 import uvicorn
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import FastAPI, HTTPException
 
 from azul_audit_forwarder import settings
@@ -23,6 +26,14 @@ app = FastAPI()
 healthy: bool = True
 output = io.StringIO()
 
+cloudwatch_client = boto3.client(
+    "logs",
+    endpoint_url=settings.st.custom_aws_endpoint,
+    region_name=settings.st.cloudwatch_region,
+    aws_access_key_id=settings.st.cloudwatch_aws_access_key_id,
+    aws_secret_access_key=settings.st.cloudwatch_aws_secret_access_key,
+)
+
 logger = AuditForwarderLogger().logger
 
 
@@ -30,7 +41,7 @@ logger = AuditForwarderLogger().logger
 def health_check() -> str:
     """Health check endpoint."""
     if healthy:
-        logger.info(f"Last sent: {datetime.fromtimestamp(read_last_sent_ts()).strftime("%Y-%m-%d %H:%M:%S")}")
+        logger.info(f"Last sent: {datetime.fromtimestamp(read_last_sent_ts()).strftime('%Y-%m-%d %H:%M:%S')}")
         return "healthy"
     else:
         raise HTTPException(status_code=500, detail="Error connecting to Loki.")
@@ -71,6 +82,84 @@ def update_last_seen_ts(new_ts: int):
     except OSError as e:
         logger.error("Error while writing to last seen file")
         logger.error(e)
+
+
+def parse_time_to_millis(log_line: str) -> int:
+    """Extract 'time=YYYY-MM-DDTHH:MM:SS[.fff]' and return milliseconds since epoch.
+    Falls back to current time in ms if parsing fails.
+    """
+    m = re.search(r"time=(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?)", log_line)
+    if not m:
+        # Falls back to current time in ms if parsing fails
+        return int(time.time() * 1000)
+    ts = m.group(1)
+    try:
+        dt = datetime.fromisoformat(ts)
+        return int(dt.timestamp() * 1000)
+    except Exception as e:
+        logger.error(f"Error parsing timestamp '{ts}': {e}")
+        logger.error("Falling back to current time in ms.")
+        return int(time.time() * 1000)
+
+
+def send_logs_to_cloudwatch(last_epoch: int):
+    """Send logs to AWS CloudWatch."""
+
+    log_group = settings.st.cloudwatch_log_group
+    log_stream = settings.st.cloudwatch_log_stream
+
+    try:
+        # Check if log group exists
+        resp = cloudwatch_client.describe_log_groups(logGroupNamePrefix=log_group)
+        groups = resp.get("logGroups", [])
+        group_exists = any(g.get("logGroupName") == log_group for g in groups)
+        if not group_exists:
+            logger.error(f"CloudWatch Log group {log_group} does not exist.")
+            return
+    except ClientError as e:
+        logger.error(f"Error checking log group existence: {e}")
+
+    try:
+        # Create the log stream if it does not already exist.
+        resp = cloudwatch_client.describe_log_streams(logGroupName=log_group, logStreamNamePrefix=log_stream)
+        streams = resp.get("logStreams", [])
+        stream_exists = any(s.get("logStreamName") == log_stream for s in streams)
+        if not stream_exists:
+            cloudwatch_client.create_log_stream(logGroupName=log_group, logStreamName=log_stream)
+    except ClientError as e:
+        logger.error(f"Error describing/creating log stream exists: {e}")
+        return
+
+    # Prepare log events
+    log_events = []
+    # Process logs from the buffer
+    processed_logs = output.getvalue()
+    if len(processed_logs) > 0:
+        list_logs = processed_logs.split("\n")
+        logger.info(f"Preparing to send {len(list_logs)} logs to CloudWatch.")
+        for log_line in list_logs:
+            if log_line.strip():
+                timestamp = parse_time_to_millis(log_line)
+                log_events.append({"timestamp": timestamp, "message": log_line.strip()})
+
+        if not log_events:
+            logger.info("No log events to send to CloudWatch.")
+            return
+
+        try:
+            log_events.sort(key=lambda x: x["timestamp"])
+            response = cloudwatch_client.put_log_events(
+                logGroupName=log_group, logStreamName=log_stream, logEvents=log_events
+            )
+            logger.info(f"Put log events response: {response}")
+            logger.info(f"Successfully sent {len(log_events)} logs to CloudWatch.")
+            update_last_seen_ts(last_epoch)
+        except (BotoCoreError, ClientError) as e:
+            logger.error(f"Error sending logs to CloudWatch: {e}")
+    else:
+        logger.info("No logs to send to CloudWatch.")
+
+    clear_output()
 
 
 def send_logs(last_epoch: int):
@@ -163,6 +252,7 @@ def poll_for_logs() -> int | None:
         loki_endpoint = f"{loki_host}/loki/api/v1/query_range"
         logger.debug(f"Querying {loki_endpoint} for {format(start_epoch)} to" f" {format(end_epoch)}")
 
+        logger.info(f"Polling Loki from {start_epoch} to {end_epoch}")
         resp = None
         try:
             resp = httpx.get(url=loki_endpoint, params=params, timeout=settings.st.http_client_timeout_seconds)
@@ -192,7 +282,11 @@ def poll_and_send_logs():
     """Poll for logs from Loki and send to host specified in settings."""
     last_epoch = poll_for_logs()
     if last_epoch:
-        send_logs(last_epoch)
+        if settings.st.enable_cloudwatch_forwarding:
+            send_logs_to_cloudwatch(last_epoch)
+        else:
+            # Send logs to target endpoint if cloudwatch forwarding is not enabled
+            send_logs(last_epoch)
 
 
 @click.command()

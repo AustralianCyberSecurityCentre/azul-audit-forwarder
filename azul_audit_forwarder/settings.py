@@ -8,10 +8,23 @@ class AuditFwdSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="audit_")
 
+    # Enable sending audit logs to AWS CloudWatch. This disables sending logs to the generic target_endpoint.
+    enable_cloudwatch_forwarding: bool = True  # TODO: set to False
+    # Log group - folder for related log streams
+    cloudwatch_log_group: str = "azul-audit-logs"
+    # Log stream - sequence of log events from the same source
+    cloudwatch_log_stream: str = "azul-audit-forwarder"
+    cloudwatch_region: str = "us-east-1"
+    # AWS Access Key ID for CloudWatch
+    cloudwatch_aws_access_key_id: str = "test"
+    # AWS Secret Access Key for CloudWatch
+    cloudwatch_aws_secret_access_key: str = "test"
+    custom_aws_endpoint: str | None = "http://localhost:4566" # TODO: set to None
+
     # location of loki server
     loki_host: str = "http://localhost:3100"
     # azul namespace to forward logs for
-    azul_namespace: str = "azul"
+    azul_namespace: str = "azul-qa"
 
     # Log instead of sending a POST by default. target_host should be `http://audit-server:9999` in a Prod environment
     target_endpoint: str = "LOG_ONLY"
