@@ -85,9 +85,7 @@ def update_last_seen_ts(new_ts: int):
 
 
 def parse_time_to_millis(log_line: str) -> int:
-    """Extract time and return milliseconds since epoch.
-    Falls back to current time in ms if parsing fails.
-    """
+    """Parse timestamp to milliseconds since epoch, or return current time if parsing fails."""
     m = re.search(r"time=(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?)", log_line)
     if not m:
         # Falls back to current time in ms if parsing fails
