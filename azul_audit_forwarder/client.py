@@ -85,7 +85,7 @@ def update_last_seen_ts(new_ts: int):
 
 
 def parse_time_to_millis(log_line: str) -> int:
-    """Extract 'time=YYYY-MM-DDTHH:MM:SS[.fff]' and return milliseconds since epoch.
+    """Extract time and return milliseconds since epoch.
     Falls back to current time in ms if parsing fails.
     """
     m = re.search(r"time=(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?)", log_line)
@@ -104,7 +104,6 @@ def parse_time_to_millis(log_line: str) -> int:
 
 def send_logs_to_cloudwatch(last_epoch: int):
     """Send logs to AWS CloudWatch."""
-
     log_group = settings.st.cloudwatch_log_group
     log_stream = settings.st.cloudwatch_log_stream
 
