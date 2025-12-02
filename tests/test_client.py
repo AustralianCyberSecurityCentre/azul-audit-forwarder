@@ -4,6 +4,7 @@ import os
 import time
 import unittest
 from typing import Any, ClassVar
+from unittest.mock import Mock
 
 import httpx
 
@@ -11,6 +12,73 @@ from azul_audit_forwarder import client, settings
 from tests import testdata
 
 from . import server as md
+
+
+class TestSendLogsToCloudwatch(unittest.TestCase):
+    def setUp(self) -> None:
+        client.clear_output()
+        # Save original client
+        self.original_cloudwatch_client = client.cloudwatch_client
+
+    def tearDown(self) -> None:
+        client.clear_output()
+        # Restore original client
+        client.cloudwatch_client = self.original_cloudwatch_client
+
+    def test_send_logs_to_cloudwatch_success(self):
+        """Test successful CloudWatch log sending."""
+        # Setup
+        client.output.write("time=2025-01-01T10:30:45.123 msg=test1\n")
+        client.output.write("time=2025-01-01T10:30:46.456 msg=test2\n")
+        timestamp = client.get_epoch_mins_ago(10)
+
+        # Mock CloudWatch client
+        mock_cloudwatch = Mock()
+        client.cloudwatch_client = mock_cloudwatch
+        mock_cloudwatch.describe_log_groups.return_value = {
+            "logGroups": [{"logGroupName": settings.st.cloudwatch_log_group}]
+        }
+        mock_cloudwatch.describe_log_streams.return_value = {
+            "logStreams": [{"logStreamName": settings.st.cloudwatch_log_stream}]
+        }
+        mock_cloudwatch.put_log_events.return_value = {"nextSequenceToken": "12345"}
+
+        # Mock update_last_seen_ts
+        client.update_last_seen_ts = Mock()
+
+        # Execute test
+        client.send_logs_to_cloudwatch(timestamp)
+
+        mock_cloudwatch.put_log_events.assert_called_once()
+        call_args = mock_cloudwatch.put_log_events.call_args
+        self.assertEqual(call_args.kwargs["logGroupName"], settings.st.cloudwatch_log_group)
+        self.assertEqual(call_args.kwargs["logStreamName"], settings.st.cloudwatch_log_stream)
+        # Assert two log events were sent
+        self.assertEqual(len(call_args.kwargs["logEvents"]), 2)
+        client.update_last_seen_ts.assert_called_once_with(timestamp)
+        self.assertEqual(len(client.output.getvalue()), 0)
+
+        # Assert logs are in order by timestamp
+        log_events = call_args.kwargs["logEvents"]
+        self.assertLessEqual(log_events[0]["timestamp"], log_events[1]["timestamp"])
+        self.assertIn("test1", log_events[0]["message"])
+        self.assertIn("test2", log_events[1]["message"])
+
+    def test_send_logs_to_cloudwatch_missing_log_group(self):
+        """Test handling of missing log group."""
+        client.output.write("time=2025-01-01T10:30:45 msg=test\n")
+        timestamp = client.get_epoch_mins_ago(10)
+
+        mock_cloudwatch = Mock()
+        client.cloudwatch_client = mock_cloudwatch
+        mock_cloudwatch.describe_log_groups.return_value = {"logGroups": []}
+        client.update_last_seen_ts = Mock()
+
+        client.send_logs_to_cloudwatch(timestamp)
+
+        mock_cloudwatch.describe_log_streams.assert_not_called()
+        mock_cloudwatch.put_log_events.assert_not_called()
+        client.update_last_seen_ts.assert_not_called()
 
 
 class TestNoServer(unittest.TestCase):
