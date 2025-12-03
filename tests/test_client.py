@@ -19,6 +19,10 @@ class TestSendLogsToCloudwatch(unittest.TestCase):
         client.clear_output()
         # Save original client
         self.original_cloudwatch_client = client.cloudwatch_client
+        # Mock the CloudWatch client to prevent endpoint errors
+        self.mock_cloudwatch = Mock()
+        client.cloudwatch_client = self.mock_cloudwatch
+
 
     def tearDown(self) -> None:
         client.clear_output()
@@ -32,16 +36,13 @@ class TestSendLogsToCloudwatch(unittest.TestCase):
         client.output.write("time=2025-01-01T10:30:46.456 msg=test2\n")
         timestamp = client.get_epoch_mins_ago(10)
 
-        # Mock CloudWatch client
-        mock_cloudwatch = Mock()
-        client.cloudwatch_client = mock_cloudwatch
-        mock_cloudwatch.describe_log_groups.return_value = {
+        self.mock_cloudwatch.describe_log_groups.return_value = {
             "logGroups": [{"logGroupName": settings.st.cloudwatch_log_group}]
         }
-        mock_cloudwatch.describe_log_streams.return_value = {
+        self.mock_cloudwatch.describe_log_streams.return_value = {
             "logStreams": [{"logStreamName": settings.st.cloudwatch_log_stream}]
         }
-        mock_cloudwatch.put_log_events.return_value = {"nextSequenceToken": "12345"}
+        self.mock_cloudwatch.put_log_events.return_value = {"nextSequenceToken": "12345"}
 
         # Mock update_last_seen_ts
         client.update_last_seen_ts = Mock()
@@ -49,8 +50,8 @@ class TestSendLogsToCloudwatch(unittest.TestCase):
         # Execute test
         client.send_logs_to_cloudwatch(timestamp)
 
-        mock_cloudwatch.put_log_events.assert_called_once()
-        call_args = mock_cloudwatch.put_log_events.call_args
+        self.mock_cloudwatch.put_log_events.assert_called_once()
+        call_args = self.mock_cloudwatch.put_log_events.call_args
         self.assertEqual(call_args.kwargs["logGroupName"], settings.st.cloudwatch_log_group)
         self.assertEqual(call_args.kwargs["logStreamName"], settings.st.cloudwatch_log_stream)
         # Assert two log events were sent
@@ -69,15 +70,13 @@ class TestSendLogsToCloudwatch(unittest.TestCase):
         client.output.write("time=2025-01-01T10:30:45 msg=test\n")
         timestamp = client.get_epoch_mins_ago(10)
 
-        mock_cloudwatch = Mock()
-        client.cloudwatch_client = mock_cloudwatch
-        mock_cloudwatch.describe_log_groups.return_value = {"logGroups": []}
+        self.mock_cloudwatch.describe_log_groups.return_value = {"logGroups": []}
         client.update_last_seen_ts = Mock()
 
         client.send_logs_to_cloudwatch(timestamp)
 
-        mock_cloudwatch.describe_log_streams.assert_not_called()
-        mock_cloudwatch.put_log_events.assert_not_called()
+        self.mock_cloudwatch.describe_log_streams.assert_not_called()
+        self.mock_cloudwatch.put_log_events.assert_not_called()
         client.update_last_seen_ts.assert_not_called()
 
 

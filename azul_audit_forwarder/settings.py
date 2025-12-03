@@ -14,7 +14,7 @@ class AuditFwdSettings(BaseSettings):
     cloudwatch_log_group: str = "azul-audit-logs"
     # Log stream - sequence of log events from the same source
     cloudwatch_log_stream: str = "azul-audit-forwarder"
-    cloudwatch_region: str = ""
+    cloudwatch_region: str = "ap-southeast-2"
     # AWS Access Key ID for CloudWatch
     cloudwatch_aws_access_key_id: str = ""
     # AWS Secret Access Key for CloudWatch
