@@ -23,7 +23,6 @@ class TestSendLogsToCloudwatch(unittest.TestCase):
         self.mock_cloudwatch = Mock()
         client.cloudwatch_client = self.mock_cloudwatch
 
-
     def tearDown(self) -> None:
         client.clear_output()
         # Restore original client

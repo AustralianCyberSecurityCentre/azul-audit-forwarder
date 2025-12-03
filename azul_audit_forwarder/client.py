@@ -36,7 +36,7 @@ if settings.st.custom_aws_endpoint is not None:
     cloudwatch_kwargs["endpoint_url"] = settings.st.custom_aws_endpoint
 
 
-cloudwatch_client = boto3.client("logs", **cloudwatch_kwargs) # type: ignore
+cloudwatch_client = boto3.client("logs", **cloudwatch_kwargs)  # type: ignore
 
 logger = AuditForwarderLogger().logger
 
