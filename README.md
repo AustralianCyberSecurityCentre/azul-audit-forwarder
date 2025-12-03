@@ -10,8 +10,10 @@ Azul-Audit-Forwarder can be configured to send logs on a configurable interval, 
 
 ## AWS Cloudwatch compatablity
 
-Azul-Audit-Forwarder supports forwarding Azul audit logs to AWS Cloudwatch. 
-For local testing, [localstack](https://github.com/localstack/localstack) can be utilised to simulate AWS Cloudwatch APIs. Azul-Audit-Forwarder can be configured for AWS Cloudwatch or localstack through settings. 
+Azul-Audit-Forwarder supports forwarding Azul audit logs to AWS Cloudwatch. Azul-Audit-Forwarder can be configured for AWS Cloudwatch or localstack through settings. 
+For local testing, [localstack](https://github.com/localstack/localstack) can be utilised to simulate AWS Cloudwatch APIs. 
+
+Localstack can be started in a docker container using the following command:
 
 ```bash
 docker run -d -p 4566:4566 -p 4571:4571 -e SERVICES=logs localstack/localstack

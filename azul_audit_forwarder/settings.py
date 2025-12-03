@@ -24,7 +24,7 @@ class AuditFwdSettings(BaseSettings):
     # location of loki server
     loki_host: str = "http://localhost:3100"
     # azul namespace to forward logs for
-    azul_namespace: str = "azul-qa"
+    azul_namespace: str = "azul"
 
     # Log instead of sending a POST by default. target_host should be `http://audit-server:9999` in a Prod environment
     target_endpoint: str = "LOG_ONLY"
