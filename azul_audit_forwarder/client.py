@@ -153,9 +153,13 @@ def send_logs_to_cloudwatch(last_epoch: int):
             response = cloudwatch_client.put_log_events(
                 logGroupName=log_group, logStreamName=log_stream, logEvents=log_events
             )
-            logger.info(f"Put log events response: {response}")
-            logger.info(f"Successfully sent {len(log_events)} logs to CloudWatch.")
-            update_last_seen_ts(last_epoch)
+            logger.debug(f"Cloudwatch Put log events response: {response}")
+            if response.get("ResponseMetadata", {}).get("HTTPStatusCode") != 200:
+                logger.error("Failed to send logs to CloudWatch.")
+                return
+            else:
+                logger.info(f"Successfully sent {len(log_events)} logs to CloudWatch.")
+                update_last_seen_ts(last_epoch)
         except (BotoCoreError, ClientError) as e:
             logger.error(f"Error sending logs to CloudWatch: {e}")
     else:
@@ -213,7 +217,7 @@ def clear_output():
     output.seek(0)
 
 
-def send_logs_after_interval(interval=5):
+def send_logs_after_interval(interval=30):
     """Repeat sending of logs after specified interval."""
     threading.Timer(interval, poll_and_send_logs).start()
     # Start the loop to send after the set interval
@@ -252,8 +256,6 @@ def poll_for_logs() -> int | None:
         }
         loki_host = settings.st.loki_host
         loki_endpoint = f"{loki_host}/loki/api/v1/query_range"
-        logger.debug(f"Querying {loki_endpoint} for {format(start_epoch)} to" f" {format(end_epoch)}")
-
         logger.info(f"Polling Loki from {start_epoch} to {end_epoch}")
         resp = None
         try:

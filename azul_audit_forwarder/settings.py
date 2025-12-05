@@ -45,7 +45,7 @@ class AuditFwdSettings(BaseSettings):
     # static key value headers to be sent when posting to target endpoint
     static_headers: dict[str, str] = {}
 
-    send_interval: int = 5
+    send_interval: int = 30
     last_sent_file: str = "/tmp/last_sent.txt"  # nosec
 
     health_host: str = "0.0.0.0"  # nosec
