@@ -38,7 +38,8 @@ class AuditFwdSettings(BaseSettings):
     # azul namespace to forward logs for
     azul_namespace: str = "azul"
 
-    # To send logs to a target endpoint, send_logs_to must be set to 'server'. Target_host should be `http://audit-server:9999` in a Prod environment
+    # To send logs to a target endpoint, send_logs_to must be set to 'server'.
+    # Target_host should be `http://audit-server:9999` in a Prod environment
     target_endpoint: str | None = None
     # Use a proxy to contact the target endpoint
     target_proxy: str | None = None
