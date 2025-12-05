@@ -19,6 +19,7 @@ class TestSendLogsToCloudwatch(unittest.TestCase):
         client.clear_output()
         # Save original client
         self.original_cloudwatch_client = client.cloudwatch_client
+        os.environ["audit_send_logs_to"] = "cloudwatch"
         # Mock the CloudWatch client to prevent endpoint errors
         self.mock_cloudwatch = Mock()
         client.cloudwatch_client = self.mock_cloudwatch
@@ -41,7 +42,10 @@ class TestSendLogsToCloudwatch(unittest.TestCase):
         self.mock_cloudwatch.describe_log_streams.return_value = {
             "logStreams": [{"logStreamName": settings.st.cloudwatch_log_stream}]
         }
-        self.mock_cloudwatch.put_log_events.return_value = {"nextSequenceToken": "12345"}
+        self.mock_cloudwatch.put_log_events.return_value = {
+            "nextSequenceToken": "12345",
+            "ResponseMetadata": {"HTTPStatusCode": 200},
+        }
 
         # Mock update_last_seen_ts
         client.update_last_seen_ts = Mock()
@@ -132,6 +136,7 @@ class TestProcessLogs(unittest.TestCase):
                 if tries > 20:  # Time out after about 4 seconds
                     raise RuntimeError("Timed out waiting for mock server to be ready")
 
+        os.environ["audit_send_logs_to"] = "server"
         os.environ["audit_target_endpoint"] = cls.server + "/audit"
         os.environ["audit_static_headers"] = json.dumps(
             {
