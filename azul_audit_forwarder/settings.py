@@ -22,7 +22,7 @@ class AuditFwdSettings(BaseSettings):
     # options: 'cloudwatch', 'server', 'log_only'
     send_logs_to: SendLogsDestination = SendLogsDestination.LOG_ONLY
 
-    # Enable sending audit logs to AWS CloudWatch. This disables sending logs to the generic target_endpoint.
+    # Enable sending audit logs to AWS CloudWatch. This disables sending logs to the generic server_target_endpoint.
     # Log group - folder for related log streams
     cloudwatch_log_group: str = "azul-audit-logs"
     # Log stream - sequence of log events from the same source
@@ -40,7 +40,7 @@ class AuditFwdSettings(BaseSettings):
 
     # To send logs to a target endpoint, send_logs_to must be set to 'server'.
     # Target_host should be `http://audit-server:9999` in a Prod environment
-    target_endpoint: str | None = None
+    server_target_endpoint: str | None = None
     # Use a proxy to contact the target endpoint
     target_proxy: str | None = None
     # static key value headers to be sent when posting to target endpoint

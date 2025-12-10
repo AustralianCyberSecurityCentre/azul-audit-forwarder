@@ -172,7 +172,7 @@ def send_logs(last_epoch: int):
     """Send logs to the specified host and port."""
     # Process logs from the buffer
     headers = copy.copy(settings.st.static_headers)
-    target_endpoint = settings.st.target_endpoint
+    server_target_endpoint = settings.st.server_target_endpoint
     # Process logs from the buffer
     processed_logs = output.getvalue()
     # Post to target endpoint
@@ -183,13 +183,13 @@ def send_logs(last_epoch: int):
             logger.info(processed_logs)
             # Update last seen timestamp once the audit logs have been successfully logged
             update_last_seen_ts(last_epoch)
-        elif target_endpoint is not None:
+        elif server_target_endpoint is not None:
             logger.info(f"Sending: {len(processed_logs)} bytes")
-            logger.info(f"headers={headers}\ntarget={target_endpoint}\nproxy={settings.st.target_proxy}")
+            logger.info(f"headers={headers}\ntarget={server_target_endpoint}\nproxy={settings.st.target_proxy}")
             try:
                 # Post to target endpoint
                 resp = httpx.post(
-                    target_endpoint,
+                    server_target_endpoint,
                     content=processed_logs,
                     headers=headers,
                     proxy=settings.st.target_proxy,
