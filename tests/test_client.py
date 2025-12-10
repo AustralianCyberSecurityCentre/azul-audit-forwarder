@@ -137,7 +137,7 @@ class TestProcessLogs(unittest.TestCase):
                     raise RuntimeError("Timed out waiting for mock server to be ready")
 
         os.environ["audit_send_logs_to"] = "server"
-        os.environ["audit_target_endpoint"] = cls.server + "/audit"
+        os.environ["audit_server_target_endpoint"] = cls.server + "/audit"
         os.environ["audit_static_headers"] = json.dumps(
             {
                 "feed": "AZUL-V3.0-EVENTS",
