@@ -17,8 +17,8 @@ from . import server as md
 class TestSendLogsToCloudwatch(unittest.TestCase):
     def setUp(self) -> None:
         client.clear_output()
-        # Save original client
-        self.original_cloudwatch_client = client.cloudwatch_client
+        # Save original client if it exists
+        self.original_cloudwatch_client = getattr(client, 'cloudwatch_client', None)
         os.environ["audit_send_logs_to"] = "cloudwatch"
         # Mock the CloudWatch client to prevent endpoint errors
         self.mock_cloudwatch = Mock()
@@ -27,7 +27,10 @@ class TestSendLogsToCloudwatch(unittest.TestCase):
     def tearDown(self) -> None:
         client.clear_output()
         # Restore original client
-        client.cloudwatch_client = self.original_cloudwatch_client
+        if self.original_cloudwatch_client is not None:
+            client.cloudwatch_client = self.original_cloudwatch_client
+        elif hasattr(client, 'cloudwatch_client'):
+            delattr(client, 'cloudwatch_client')
 
     def test_send_logs_to_cloudwatch_success(self):
         """Test successful CloudWatch log sending."""
