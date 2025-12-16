@@ -26,17 +26,17 @@ app = FastAPI()
 healthy: bool = True
 output = io.StringIO()
 
-cloudwatch_kwargs = {
-    "region_name": settings.st.cloudwatch_region,
-    "aws_access_key_id": settings.st.cloudwatch_aws_access_key_id,
-    "aws_secret_access_key": settings.st.cloudwatch_aws_secret_access_key,
-}
+if settings.st.send_logs_to == settings.SendLogsDestination.CLOUDWATCH:
+    cloudwatch_kwargs = {
+        "region_name": settings.st.cloudwatch_region,
+        "aws_access_key_id": settings.st.cloudwatch_aws_access_key_id,
+        "aws_secret_access_key": settings.st.cloudwatch_aws_secret_access_key,
+    }
 
-if settings.st.custom_aws_endpoint:
-    cloudwatch_kwargs["endpoint_url"] = settings.st.custom_aws_endpoint
+    if settings.st.custom_aws_endpoint:
+        cloudwatch_kwargs["endpoint_url"] = settings.st.custom_aws_endpoint
 
-
-cloudwatch_client = boto3.client("logs", **cloudwatch_kwargs)  # type: ignore
+    cloudwatch_client = boto3.client("logs", **cloudwatch_kwargs)  # type: ignore
 
 logger = AuditForwarderLogger().logger
 
