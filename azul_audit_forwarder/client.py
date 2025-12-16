@@ -32,7 +32,7 @@ cloudwatch_kwargs = {
     "aws_secret_access_key": settings.st.cloudwatch_aws_secret_access_key,
 }
 
-if settings.st.custom_aws_endpoint is not None:
+if settings.st.custom_aws_endpoint:
     cloudwatch_kwargs["endpoint_url"] = settings.st.custom_aws_endpoint
 
 
