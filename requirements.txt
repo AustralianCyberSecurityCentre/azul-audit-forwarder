@@ -1,8 +1,0 @@
-boto3
-click
-fastapi
-httpx
-loguru
-pydantic
-pydantic-settings
-uvicorn[standard]
