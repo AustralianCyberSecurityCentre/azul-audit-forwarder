@@ -31,7 +31,7 @@ class AuditFwdSettings(BaseSettings):
     # AWS Access Key ID for CloudWatch
     cloudwatch_aws_access_key_id: str = "test"
     # AWS Secret Access Key for CloudWatch
-    cloudwatch_aws_secret_access_key: str = "test"
+    cloudwatch_aws_secret_access_key: str = "test"  # noqa: S105
     custom_aws_endpoint: str | None = None
     # location of loki server
     loki_host: str = "http://localhost:3100"
@@ -47,9 +47,9 @@ class AuditFwdSettings(BaseSettings):
     static_headers: dict[str, str] = {}
 
     send_interval: int = 30
-    last_sent_file: str = "/tmp/last_sent.txt"  # nosec
+    last_sent_file: str = "/tmp/last_sent.txt"  # noqa: S108
 
-    health_host: str = "0.0.0.0"  # nosec
+    health_host: str = "0.0.0.0"  # noqa: S104
     health_port: int = 8855
 
     http_client_timeout_seconds: float = 30.0
@@ -60,7 +60,7 @@ class Logging(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="logger_")
 
-    log_file: str = "/tmp/azul_audit_forwarder.log"  # nosec
+    log_file: str = "/tmp/azul_audit_forwarder.log"  # noqa: S108
     log_format: str = (
         "level=<level>{level: <8}</level> time=<green>{time:YYYY-MM-DDTHH:mm:ss.SS}</green> "
         "name=<cyan>{name}</cyan> function=<cyan>{function}</cyan> {message}"
