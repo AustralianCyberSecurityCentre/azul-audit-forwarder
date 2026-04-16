@@ -269,7 +269,7 @@ def poll_for_logs() -> int | None:
                 if resp.status_code == 200:
                     _set_healthy(True)
                     process_logs(resp.json())
-                    # Advance both the loop cursor and the high-water mark
+                    # Advance the cursor and record the last successful window
                     start_epoch = end_epoch
                     last_successful_epoch = end_epoch
                     break
