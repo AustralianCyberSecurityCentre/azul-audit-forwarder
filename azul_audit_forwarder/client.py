@@ -245,8 +245,8 @@ def poll_for_logs() -> int | None:
     """Poll for logs from Loki."""
     # The start time for the query as a nanosecond Unix epoch
     start_epoch = read_last_sent_ts()
-    # Initial value for end_epoch
-    end_epoch = start_epoch + (5 * 60)
+    # Track last successfully completed window so progress is never lost
+    last_successful_epoch = None
 
     while start_epoch < get_epoch_mins_ago(1):
         # Query audit logs in 5 min intervals.
@@ -260,30 +260,38 @@ def poll_for_logs() -> int | None:
         }
         loki_host = settings.st.loki_host
         loki_endpoint = f"{loki_host}/loki/api/v1/query_range"
-        logger.info(f"Polling Loki from {start_epoch} to {end_epoch}")
-        resp = None
-        try:
-            resp = httpx.get(url=loki_endpoint, params=params, timeout=settings.st.http_client_timeout_seconds)
-            if resp.status_code == 200:
-                _set_healthy(True)
-                process_logs(resp.json())
-                # Update start epoch for loop iteration
-                start_epoch = end_epoch
-            else:
-                logger.error(f"Error reaching Loki: {resp.status_code}")
-                logger.error(f"{resp.content}")
+        window_failures = 0
+        while window_failures < 3:
+            logger.info(f"Polling Loki from {start_epoch} ({datetime.fromtimestamp(start_epoch)}) to {end_epoch} ({datetime.fromtimestamp(end_epoch)})")
+            resp = None
+            try:
+                resp = httpx.get(url=loki_endpoint, params=params, timeout=settings.st.http_client_timeout_seconds)
+                if resp.status_code == 200:
+                    _set_healthy(True)
+                    process_logs(resp.json())
+                    # Advance the cursor and record the last successful window
+                    start_epoch = end_epoch
+                    last_successful_epoch = end_epoch
+                    break
+                else:
+                    logger.error(f"Error reaching Loki: {resp.status_code}")
+                    logger.error(f"{resp.content}")
+                    _set_healthy(False)
+                    window_failures += 1
+            except Exception as ex:
+                # Catch connection errors
+                logger.error(f"Error connecting to: {loki_endpoint}")
+                logger.error(params)
+                if resp:
+                    logger.error(f"{resp.content}")
+                logger.error(f"Error: {ex}")
                 _set_healthy(False)
-                return None
-        except Exception as ex:
-            # Catch connection errors
-            logger.error(f"Error connecting to: {loki_endpoint}")
-            logger.error(params)
-            if resp:
-                logger.error(f"{resp.content}")
-            logger.error(f"Error: {ex}")
-            _set_healthy(False)
-            return None
-    return end_epoch
+                window_failures += 1
+        else:
+            logger.warning(f"Skipping window {start_epoch} ({datetime.fromtimestamp(start_epoch)}) to {end_epoch} ({datetime.fromtimestamp(end_epoch)}) after 3 failed attempts.")
+            start_epoch = end_epoch
+
+    return last_successful_epoch if last_successful_epoch is not None else start_epoch
 
 
 def poll_and_send_logs():
