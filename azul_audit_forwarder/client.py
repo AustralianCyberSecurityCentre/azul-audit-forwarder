@@ -157,7 +157,9 @@ def send_logs_to_cloudwatch(last_epoch: int):
 
             # CloudWatch enforces a 10,000 event limit per put_log_events call
             CLOUDWATCH_MAX_EVENTS = 10000
-            chunks = [log_events[i:i + CLOUDWATCH_MAX_EVENTS] for i in range(0, len(log_events), CLOUDWATCH_MAX_EVENTS)]
+            chunks = [
+                log_events[i : i + CLOUDWATCH_MAX_EVENTS] for i in range(0, len(log_events), CLOUDWATCH_MAX_EVENTS)
+            ]
             logger.info(f"Sending {len(log_events)} log(s) to CloudWatch in {len(chunks)} chunk(s).")
 
             for chunk in chunks:
