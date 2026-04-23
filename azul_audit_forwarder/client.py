@@ -6,6 +6,7 @@ Sends logs to a specified destination at a configurable interval.
 
 import copy
 import io
+import math
 import os.path
 import re
 import threading
@@ -157,12 +158,11 @@ def send_logs_to_cloudwatch(last_epoch: int):
 
             # CloudWatch enforces a 10,000 event limit per put_log_events call
             CLOUDWATCH_MAX_EVENTS = 10000
-            chunks = [
-                log_events[i : i + CLOUDWATCH_MAX_EVENTS] for i in range(0, len(log_events), CLOUDWATCH_MAX_EVENTS)
-            ]
-            logger.info(f"Sending {len(log_events)} log(s) to CloudWatch in {len(chunks)} chunk(s).")
+            num_chunks = math.ceil(len(log_events) / CLOUDWATCH_MAX_EVENTS)
+            logger.info(f"Sending {len(log_events)} logs to CloudWatch in {num_chunks} chunks.")
 
-            for chunk in chunks:
+            for i in range(0, len(log_events), CLOUDWATCH_MAX_EVENTS):
+                chunk = log_events[i : i + CLOUDWATCH_MAX_EVENTS]
                 response = cloudwatch_client.put_log_events(
                     logGroupName=log_group, logStreamName=log_stream, logEvents=chunk
                 )
