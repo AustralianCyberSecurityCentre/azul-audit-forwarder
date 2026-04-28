@@ -221,11 +221,11 @@ def clear_output():
     output.seek(0)
 
 
-def send_logs_after_interval(interval=30):
+def _poll_loop(interval: int):
     """Repeat sending of logs after specified interval."""
-    threading.Timer(interval, poll_and_send_logs).start()
-    # Start the loop to send after the set interval
-    threading.Timer(interval, send_logs_after_interval).start()
+    while True:
+        poll_and_send_logs()
+        time.sleep(interval)
 
 
 def process_logs(content: dict) -> None:
@@ -252,7 +252,7 @@ def poll_for_logs() -> int | None:
         # Query audit logs in 5 min intervals.
         end_epoch = start_epoch + (5 * 60)
         params = {
-            "query": f'{{app="restapi-server-audit"}} | logfmt | '
+            "query": f'{{app="restapi-server-audit"}} | '
             f"namespace = `{settings.st.azul_namespace}` | username != `-`",
             "limit": 5000,
             "start": start_epoch,
@@ -302,7 +302,8 @@ def poll_and_send_logs():
 @click.option("--port", default=settings.st.health_port)
 def main(host, port):
     """Run Azul Audit Forwarder from the command line."""
-    send_logs_after_interval(settings.st.send_interval)
+    t = threading.Thread(target=_poll_loop, args=(settings.st.send_interval,), daemon=True)
+    t.start()
     # Start FastAPI app for health probes
     uvicorn.run(app, host=host, port=port)
 
