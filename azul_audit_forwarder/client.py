@@ -221,7 +221,7 @@ def clear_output():
     output.seek(0)
 
 
-def _poll_loop(interval: int):
+def send_logs_after_interval(interval: int):
     """Repeat sending of logs after specified interval."""
     while True:
         poll_and_send_logs()
@@ -302,7 +302,7 @@ def poll_and_send_logs():
 @click.option("--port", default=settings.st.health_port)
 def main(host, port):
     """Run Azul Audit Forwarder from the command line."""
-    t = threading.Thread(target=_poll_loop, args=(settings.st.send_interval,), daemon=True)
+    t = threading.Thread(target=send_logs_after_interval, args=(settings.st.send_interval,), daemon=True)
     t.start()
     # Start FastAPI app for health probes
     uvicorn.run(app, host=host, port=port)
