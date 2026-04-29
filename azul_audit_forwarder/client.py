@@ -6,6 +6,7 @@ Sends logs to a specified destination at a configurable interval.
 
 import copy
 import io
+import math
 import os.path
 import re
 import threading
@@ -154,16 +155,24 @@ def send_logs_to_cloudwatch(last_epoch: int):
         try:
             # Sort log events by timestamp
             log_events.sort(key=lambda x: x["timestamp"])
-            response = cloudwatch_client.put_log_events(
-                logGroupName=log_group, logStreamName=log_stream, logEvents=log_events
-            )
-            logger.debug(f"Cloudwatch Put log events response: {response}")
-            if response.get("ResponseMetadata", {}).get("HTTPStatusCode") != 200:
-                logger.error("Failed to send logs to CloudWatch.")
-                return
-            else:
-                logger.info(f"Successfully sent {len(log_events)} logs to CloudWatch.")
-                update_last_seen_ts(last_epoch)
+
+            # CloudWatch enforces a 10,000 event limit per put_log_events call
+            CLOUDWATCH_MAX_EVENTS = 10000
+            num_chunks = math.ceil(len(log_events) / CLOUDWATCH_MAX_EVENTS)
+            logger.info(f"Sending {len(log_events)} logs to CloudWatch in {num_chunks} chunks.")
+
+            for i in range(0, len(log_events), CLOUDWATCH_MAX_EVENTS):
+                chunk = log_events[i : i + CLOUDWATCH_MAX_EVENTS]
+                response = cloudwatch_client.put_log_events(
+                    logGroupName=log_group, logStreamName=log_stream, logEvents=chunk
+                )
+                logger.debug(f"Cloudwatch Put log events response: {response}")
+                if response.get("ResponseMetadata", {}).get("HTTPStatusCode") != 200:
+                    logger.error("Failed to send logs to CloudWatch.")
+                    return
+
+            logger.info(f"Successfully sent {len(log_events)} log(s) to CloudWatch.")
+            update_last_seen_ts(last_epoch)
         except (BotoCoreError, ClientError) as e:
             logger.error(f"Error sending logs to CloudWatch: {e}")
     else:
