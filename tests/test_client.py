@@ -118,7 +118,7 @@ class TestDynamicWindowPollForLogs(unittest.TestCase):
                 if start <= log[0] < end:
                     matching.append(log)
             # Loki caps results at 5000
-            returned = matching[: 5000]
+            returned = matching[:5000]
 
             # Loki returns each entry as [nanosecond_timestamp, log_line]
             values = []
