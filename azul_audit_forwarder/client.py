@@ -257,7 +257,7 @@ def process_logs(content: dict) -> None:
 def poll_for_logs() -> tuple[int | None, bool]:
     """Poll for logs from Loki using dynamic time windows.
 
-    Halves the query window whenever the Loki limit is hit, down to 500 ms
+    Halves the query window whenever the Loki limit is hit, down to 250 ms
     precision, then doubles back toward 5 minutes after a successful fetch.
     """
     current_start = float(read_last_sent_ts())
