@@ -283,7 +283,11 @@ def poll_for_logs() -> tuple[int | None, bool]:
         logger.info(f"Polling Loki from {current_start} to {current_end} (window={window_secs}s)")
         resp = None
         try:
-            resp = httpx.get(url=loki_endpoint, params=params, timeout=settings.st.http_client_timeout_seconds)
+            resp = httpx.get(
+                url=loki_endpoint,
+                params=params,
+                timeout=settings.st.http_client_timeout_seconds,
+            )
             if resp.status_code == 200:
                 _set_healthy(True)
                 data = resp.json()
@@ -327,7 +331,7 @@ def poll_for_logs() -> tuple[int | None, bool]:
             _set_healthy(False)
             return None, False
 
-    return int(last_processed_end) if last_processed_end is not None else None, hit_limit
+    return (int(last_processed_end) if last_processed_end is not None else None), hit_limit
 
 
 def poll_and_send_logs() -> bool:
