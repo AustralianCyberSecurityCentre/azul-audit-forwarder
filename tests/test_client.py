@@ -4,7 +4,7 @@ import os
 import time
 import unittest
 from typing import Any, ClassVar
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import httpx
 
@@ -84,6 +84,74 @@ class TestSendLogsToCloudwatch(unittest.TestCase):
         self.mock_cloudwatch.describe_log_streams.assert_not_called()
         self.mock_cloudwatch.put_log_events.assert_not_called()
         client.update_last_seen_ts.assert_not_called()
+
+
+class TestDynamicWindowPollForLogs(unittest.TestCase):
+    def setUp(self):
+        client.clear_output()
+
+    def tearDown(self):
+        client.clear_output()
+
+    def test_8000_logs_across_two_seconds(self):
+        """Test dynamic windowing retrieves all 8000 logs: 6000 in second 1, 2000 in second 2."""
+        # Place the 2-second log window 2 minutes in the past so it falls before the real cutoff.
+        windowStart = int(time.time()) - 120
+        # Create 8000 logs across 2 seconds.
+        logsSec1 = 6000
+        logsSec2 = 2000
+
+        all_logs = []
+        # Distribute logsSec1 timestamps evenly across 2 seconds.
+        # i / logsSec1 gives a fraction in 0 - 1, spacing the logs evenly across the second.
+        for i in range(logsSec1):
+            all_logs.append((windowStart + (i / logsSec1), f"log line {i}"))
+        for i in range(logsSec2):
+            all_logs.append(((windowStart + 1) + (i / logsSec2), f"log line {logsSec1 + i}"))
+
+        def mock_loki_get(url, params, timeout):
+            start = float(params["start"])
+            end = float(params["end"])
+            # Find all pre-generated logs whose timestamps fall within the query window
+            matching = []
+            for log in all_logs:
+                if start <= log[0] < end:
+                    matching.append(log)
+            # Loki caps results at 5000
+            returned = matching[: 5000]
+
+            # Loki returns each entry as [nanosecond_timestamp, log_line]
+            values = []
+            for ts, msg in returned:
+                # Convert timestamp to nanoseconds for Loki format
+                values.append([str(int(ts * 10**9)), msg])
+            mock_resp = Mock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = {
+                "data": {
+                    "result": [{"stream": {}, "values": values}],
+                    "stats": {"summary": {"totalEntriesReturned": len(returned)}},
+                }
+            }
+            return mock_resp
+
+        with (
+            patch("httpx.get", side_effect=mock_loki_get),
+            # Fix the start of the query window instead of reading from disk.
+            patch("azul_audit_forwarder.client.read_last_sent_ts", return_value=int(windowStart)),
+        ):
+            # The window halves repeatedly until it fits under 5000 logs, then processes
+            # the remaining windows up to the cutoff, retrieving all 8000 logs in total.
+            last_epoch, hit_limit = client.poll_for_logs()
+
+        self.assertIsNotNone(last_epoch)
+        self.assertTrue(hit_limit)
+        log_lines = []
+        for line in client.output.getvalue().split("\n"):
+            if line.strip():
+                log_lines.append(line)
+        # Assert all 8000 logs were retrieved across the windows.
+        self.assertEqual(len(log_lines), logsSec1 + logsSec2)
 
 
 class TestNoServer(unittest.TestCase):
