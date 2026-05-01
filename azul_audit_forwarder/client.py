@@ -28,7 +28,7 @@ healthy: bool = True
 output = io.StringIO()
 LOKI_LIMIT = 5000
 MAX_WINDOW_SECS = 5 * 60  # 5 minutes
-MIN_WINDOW_SECS = 0.5  # 500 ms
+MIN_WINDOW_SECS = 0.25  # 250 ms
 
 if settings.st.send_logs_to == settings.SendLogsDestination.CLOUDWATCH:
     cloudwatch_kwargs = {
@@ -236,8 +236,9 @@ def clear_output():
 def send_logs_after_interval(interval: int):
     """Repeat sending of logs after specified interval."""
     while True:
-        poll_and_send_logs()
-        time.sleep(interval)
+        hit_limit = poll_and_send_logs()
+        # Sleep for interval or 0.25 seconds if we hit the Loki limit to avoid hitting it repeatedly without delay
+        time.sleep(MIN_WINDOW_SECS if hit_limit else interval)
 
 
 def process_logs(content: dict) -> None:
@@ -253,7 +254,7 @@ def process_logs(content: dict) -> None:
     output.flush()
 
 
-def poll_for_logs() -> int | None:
+def poll_for_logs() -> tuple[int | None, bool]:
     """Poll for logs from Loki using dynamic time windows.
 
     Halves the query window whenever the Loki limit is hit, down to 500 ms
@@ -266,6 +267,7 @@ def poll_for_logs() -> int | None:
     window_secs = float(MAX_WINDOW_SECS)
     # Track the end of the last successfully processed window so we can return it at the end
     last_processed_end: float | None = None
+    hit_limit = False
 
     while current_start < cutoff:
         current_end = min(current_start + window_secs, cutoff)
@@ -290,27 +292,31 @@ def poll_for_logs() -> int | None:
                 if num_returned >= LOKI_LIMIT and window_secs > MIN_WINDOW_SECS:
                     # Hit the limit; halve the window and retry from the same start.
                     window_secs = max(window_secs / 2, MIN_WINDOW_SECS)
+                    hit_limit = True
                     logger.info(f"Hit Loki limit ({num_returned} logs), shrinking window to {window_secs}s")
                     continue
 
                 if num_returned >= LOKI_LIMIT:
+                    # At minimum window and still hitting the limit; log a warning and move on.
+                    hit_limit = True
                     logger.warning(
                         f"Hit Loki limit {num_returned} logs at window {MIN_WINDOW_SECS} "
                         "some logs in this window may be dropped."
                     )
 
+                # Successfully retrieved logs for this window; process them and move the window forward.
                 process_logs(data)
                 last_processed_end = current_end
                 current_start = current_end
 
                 if num_returned < LOKI_LIMIT:
-                    # Under the limit; double the window so we don't query too frequently.
+                    # Under the limit; double the window.
                     window_secs = min(window_secs * 2, MAX_WINDOW_SECS)
             else:
                 logger.error(f"Error reaching Loki: {resp.status_code}")
                 logger.error(f"{resp.content}")
                 _set_healthy(False)
-                return None
+                return None, False
         except Exception as ex:
             # Catch connection errors
             logger.error(f"Error connecting to: {loki_endpoint}")
@@ -319,20 +325,21 @@ def poll_for_logs() -> int | None:
                 logger.error(f"{resp.content}")
             logger.error(f"Error: {ex}")
             _set_healthy(False)
-            return None
+            return None, False
 
-    return int(last_processed_end) if last_processed_end is not None else None
+    return int(last_processed_end) if last_processed_end is not None else None, hit_limit
 
 
-def poll_and_send_logs():
+def poll_and_send_logs() -> bool:
     """Poll for logs from Loki and send to host specified in settings."""
-    last_epoch = poll_for_logs()
+    last_epoch, hit_limit = poll_for_logs()
     if last_epoch:
         if settings.st.send_logs_to == settings.SendLogsDestination.CLOUDWATCH:
             send_logs_to_cloudwatch(last_epoch)
         else:
             # Send logs to target endpoint if cloudwatch forwarding is not enabled
             send_logs(last_epoch)
+    return hit_limit
 
 
 @click.command()
