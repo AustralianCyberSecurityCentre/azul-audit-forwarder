@@ -268,6 +268,7 @@ def poll_for_logs() -> tuple[int | None, bool]:
     # Track the end of the last successfully processed window so we can return it at the end
     last_processed_end: float | None = None
     hit_limit = False
+    window_failures = 0
 
     while current_start < cutoff:
         current_end = min(current_start + window_secs, cutoff)
@@ -312,15 +313,22 @@ def poll_for_logs() -> tuple[int | None, bool]:
                 process_logs(data)
                 last_processed_end = current_end
                 current_start = current_end
+                window_failures = 0
 
                 if num_returned < LOKI_LIMIT:
                     # Under the limit; double the window.
                     window_secs = min(window_secs * 2, MAX_WINDOW_SECS)
             else:
-                logger.error(f"Error reaching Loki: {resp.status_code}")
+                logger.error(f"Loki returned error {resp.status_code}")
                 logger.error(f"{resp.content}")
                 _set_healthy(False)
-                return None, False
+                window_failures += 1
+                if window_failures >= 3:
+                    logger.warning(
+                        f"Window [{current_start}, {current_end}] failed {window_failures} times, skipping."
+                    )
+                    current_start = current_end
+                    window_failures = 0
         except Exception as ex:
             # Catch connection errors
             logger.error(f"Error connecting to: {loki_endpoint}")
@@ -329,7 +337,6 @@ def poll_for_logs() -> tuple[int | None, bool]:
                 logger.error(f"{resp.content}")
             logger.error(f"Error: {ex}")
             _set_healthy(False)
-            return None, False
 
     return (int(last_processed_end) if last_processed_end is not None else None), hit_limit
 
