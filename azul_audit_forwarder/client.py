@@ -6,6 +6,7 @@ Sends logs to a specified destination at a configurable interval.
 
 import copy
 import io
+import math
 import os.path
 import re
 import threading
@@ -25,6 +26,9 @@ from azul_audit_forwarder.log import AuditForwarderLogger
 app = FastAPI()
 healthy: bool = True
 output = io.StringIO()
+LOKI_LIMIT = 5000
+MAX_WINDOW_SECS = 5 * 60  # 5 minutes
+MIN_WINDOW_SECS = 0.25  # 250 ms
 
 if settings.st.send_logs_to == settings.SendLogsDestination.CLOUDWATCH:
     cloudwatch_kwargs = {
@@ -154,16 +158,24 @@ def send_logs_to_cloudwatch(last_epoch: int):
         try:
             # Sort log events by timestamp
             log_events.sort(key=lambda x: x["timestamp"])
-            response = cloudwatch_client.put_log_events(
-                logGroupName=log_group, logStreamName=log_stream, logEvents=log_events
-            )
-            logger.debug(f"Cloudwatch Put log events response: {response}")
-            if response.get("ResponseMetadata", {}).get("HTTPStatusCode") != 200:
-                logger.error("Failed to send logs to CloudWatch.")
-                return
-            else:
-                logger.info(f"Successfully sent {len(log_events)} logs to CloudWatch.")
-                update_last_seen_ts(last_epoch)
+
+            # CloudWatch enforces a 10,000 event limit per put_log_events call
+            CLOUDWATCH_MAX_EVENTS = 10000
+            num_chunks = math.ceil(len(log_events) / CLOUDWATCH_MAX_EVENTS)
+            logger.info(f"Sending {len(log_events)} logs to CloudWatch in {num_chunks} chunks.")
+
+            for i in range(0, len(log_events), CLOUDWATCH_MAX_EVENTS):
+                chunk = log_events[i : i + CLOUDWATCH_MAX_EVENTS]
+                response = cloudwatch_client.put_log_events(
+                    logGroupName=log_group, logStreamName=log_stream, logEvents=chunk
+                )
+                logger.debug(f"Cloudwatch Put log events response: {response}")
+                if response.get("ResponseMetadata", {}).get("HTTPStatusCode") != 200:
+                    logger.error("Failed to send logs to CloudWatch.")
+                    return
+
+            logger.info(f"Successfully sent {len(log_events)} log(s) to CloudWatch.")
+            update_last_seen_ts(last_epoch)
         except (BotoCoreError, ClientError) as e:
             logger.error(f"Error sending logs to CloudWatch: {e}")
     else:
@@ -221,11 +233,12 @@ def clear_output():
     output.seek(0)
 
 
-def send_logs_after_interval(interval=30):
+def send_logs_after_interval(interval: int):
     """Repeat sending of logs after specified interval."""
-    threading.Timer(interval, poll_and_send_logs).start()
-    # Start the loop to send after the set interval
-    threading.Timer(interval, send_logs_after_interval).start()
+    while True:
+        hit_limit = poll_and_send_logs()
+        # Sleep for interval or 0.25 seconds if we hit the Loki limit to avoid hitting it repeatedly without delay
+        time.sleep(MIN_WINDOW_SECS if hit_limit else interval)
 
 
 def process_logs(content: dict) -> None:
@@ -241,68 +254,96 @@ def process_logs(content: dict) -> None:
     output.flush()
 
 
-def poll_for_logs() -> int | None:
-    """Poll for logs from Loki."""
-    # The start time for the query as a nanosecond Unix epoch
-    start_epoch = read_last_sent_ts()
-    # Track last successfully completed window so progress is never lost
-    last_successful_epoch = None
+def poll_for_logs() -> tuple[int | None, bool]:
+    """Poll for logs from Loki using dynamic time windows.
 
-    while start_epoch < get_epoch_mins_ago(1):
-        # Query audit logs in 5 min intervals.
-        end_epoch = start_epoch + (5 * 60)
+    Halves the query window whenever the Loki limit is hit, down to 250 ms
+    precision, then doubles back toward 5 minutes after a successful fetch.
+    """
+    current_start = float(read_last_sent_ts())
+    cutoff = float(get_epoch_mins_ago(1))
+
+    # Start with a 5 minute window
+    window_secs = float(MAX_WINDOW_SECS)
+    # Track the end of the last successfully processed window so we can return it at the end
+    last_processed_end: float | None = None
+    hit_limit = False
+
+    while current_start < cutoff:
+        current_end = min(current_start + window_secs, cutoff)
+
         params = {
-            "query": f'{{app="restapi-server-audit"}} | logfmt | '
-            f"namespace = `{settings.st.azul_namespace}` | username != `-`",
-            "limit": 5000,
-            "start": start_epoch,
-            "end": end_epoch,
+            "query": f'{{app="restapi-server-audit"}} | namespace = `{settings.st.azul_namespace}` | username != `-`',
+            "limit": LOKI_LIMIT,
+            "start": current_start,
+            "end": current_end,
         }
         loki_host = settings.st.loki_host
         loki_endpoint = f"{loki_host}/loki/api/v1/query_range"
-        window_failures = 0
-        while window_failures < 3:
-            logger.info(f"Polling Loki from {start_epoch} ({datetime.fromtimestamp(start_epoch)}) to {end_epoch} ({datetime.fromtimestamp(end_epoch)})")
-            resp = None
-            try:
-                resp = httpx.get(url=loki_endpoint, params=params, timeout=settings.st.http_client_timeout_seconds)
-                if resp.status_code == 200:
-                    _set_healthy(True)
-                    process_logs(resp.json())
-                    # Advance the cursor and record the last successful window
-                    start_epoch = end_epoch
-                    last_successful_epoch = end_epoch
-                    break
-                else:
-                    logger.error(f"Error reaching Loki: {resp.status_code}")
-                    logger.error(f"{resp.content}")
-                    _set_healthy(False)
-                    window_failures += 1
-            except Exception as ex:
-                # Catch connection errors
-                logger.error(f"Error connecting to: {loki_endpoint}")
-                logger.error(params)
-                if resp:
-                    logger.error(f"{resp.content}")
-                logger.error(f"Error: {ex}")
+        logger.info(f"Polling Loki from {current_start} to {current_end} (window={window_secs}s)")
+        resp = None
+        try:
+            resp = httpx.get(
+                url=loki_endpoint,
+                params=params,
+                timeout=settings.st.http_client_timeout_seconds,
+            )
+            if resp.status_code == 200:
+                _set_healthy(True)
+                data = resp.json()
+                num_returned = data["data"]["stats"]["summary"]["totalEntriesReturned"]
+
+                if num_returned >= LOKI_LIMIT and window_secs > MIN_WINDOW_SECS:
+                    # Hit the limit; halve the window and retry from the same start.
+                    window_secs = max(window_secs / 2, MIN_WINDOW_SECS)
+                    hit_limit = True
+                    logger.info(f"Hit Loki limit ({num_returned} logs), shrinking window to {window_secs}s")
+                    continue
+
+                if num_returned >= LOKI_LIMIT:
+                    # At minimum window and still hitting the limit; log a warning and move on.
+                    hit_limit = True
+                    logger.warning(
+                        f"Hit Loki limit {num_returned} logs at window {MIN_WINDOW_SECS} "
+                        "some logs in this window may be dropped."
+                    )
+
+                # Successfully retrieved logs for this window; process them and move the window forward.
+                process_logs(data)
+                last_processed_end = current_end
+                current_start = current_end
+
+                if num_returned < LOKI_LIMIT:
+                    # Under the limit; double the window.
+                    window_secs = min(window_secs * 2, MAX_WINDOW_SECS)
+            else:
+                logger.error(f"Error reaching Loki: {resp.status_code}")
+                logger.error(f"{resp.content}")
                 _set_healthy(False)
-                window_failures += 1
-        else:
-            logger.warning(f"Skipping window {start_epoch} ({datetime.fromtimestamp(start_epoch)}) to {end_epoch} ({datetime.fromtimestamp(end_epoch)}) after 3 failed attempts.")
-            start_epoch = end_epoch
+                return None, False
+        except Exception as ex:
+            # Catch connection errors
+            logger.error(f"Error connecting to: {loki_endpoint}")
+            logger.error(params)
+            if resp:
+                logger.error(f"{resp.content}")
+            logger.error(f"Error: {ex}")
+            _set_healthy(False)
+            return None, False
 
-    return last_successful_epoch if last_successful_epoch is not None else start_epoch
+    return (int(last_processed_end) if last_processed_end is not None else None), hit_limit
 
 
-def poll_and_send_logs():
+def poll_and_send_logs() -> bool:
     """Poll for logs from Loki and send to host specified in settings."""
-    last_epoch = poll_for_logs()
+    last_epoch, hit_limit = poll_for_logs()
     if last_epoch:
         if settings.st.send_logs_to == settings.SendLogsDestination.CLOUDWATCH:
             send_logs_to_cloudwatch(last_epoch)
         else:
             # Send logs to target endpoint if cloudwatch forwarding is not enabled
             send_logs(last_epoch)
+    return hit_limit
 
 
 @click.command()
@@ -310,7 +351,8 @@ def poll_and_send_logs():
 @click.option("--port", default=settings.st.health_port)
 def main(host, port):
     """Run Azul Audit Forwarder from the command line."""
-    send_logs_after_interval(settings.st.send_interval)
+    t = threading.Thread(target=send_logs_after_interval, args=(settings.st.send_interval,), daemon=True)
+    t.start()
     # Start FastAPI app for health probes
     uvicorn.run(app, host=host, port=port)
 
