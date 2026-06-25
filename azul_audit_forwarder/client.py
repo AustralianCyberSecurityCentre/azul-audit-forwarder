@@ -158,13 +158,13 @@ def send_logs_to_cloudwatch(last_epoch: int):
             # Sort log events by timestamp
             log_events.sort(key=lambda x: x["timestamp"])
 
-            # CloudWatch enforces a 10,000 event limit per put_log_events call, as well as a
-            # 1,048,576 byte batch limit where each event costs its UTF-8 message size + 26 bytes.
+            # CloudWatch sets a 10,000 event limit per put_log_events call, and a
+            # 1,048,576 byte limit for each message plus 26 bytes
             CLOUDWATCH_MAX_EVENTS = 10000
             CLOUDWATCH_MAX_BATCH_BYTES = 1048576
             CLOUDWATCH_EVENT_OVERHEAD_BYTES = 26
 
-            # Build chunks that respect both the event count and byte size limits.
+            # Build chunks that respect the event count and byte size limits
             chunks = []
             current_chunk = []
             current_bytes = 0
