@@ -71,6 +71,38 @@ class TestSendLogsToCloudwatch(unittest.TestCase):
         self.assertIn("test1", log_events[0]["message"])
         self.assertIn("test2", log_events[1]["message"])
 
+    def test_send_logs_to_cloudwatch_byte_limit_chunking(self):
+        """Test that logs exceeding the CloudWatch batch byte limit are split into multiple chunks."""
+        # Each line is 500 KB, so two lines fit in one 1 MB batch and the third forces a new chunk.
+        line_size = 500000
+        for i in range(3):
+            client.output.write(f"time=2025-01-01T10:30:4{i} msg={'x' * line_size}\n")
+        timestamp = client.get_epoch_mins_ago(10)
+
+        self.mock_cloudwatch.describe_log_groups.return_value = {
+            "logGroups": [{"logGroupName": settings.st.cloudwatch_log_group}]
+        }
+        self.mock_cloudwatch.describe_log_streams.return_value = {
+            "logStreams": [{"logStreamName": settings.st.cloudwatch_log_stream}]
+        }
+        self.mock_cloudwatch.put_log_events.return_value = {
+            "nextSequenceToken": "12345",
+            "ResponseMetadata": {"HTTPStatusCode": 200},
+        }
+        client.update_last_seen_ts = Mock()
+
+        client.send_logs_to_cloudwatch(timestamp)
+
+        # Check that call_count is 2, as three 500 KB lines cannot fit in one call
+        self.assertEqual(self.mock_cloudwatch.put_log_events.call_count, 2)
+        # No single chunk may exceed the CloudWatch batch byte limit.
+        for call in self.mock_cloudwatch.put_log_events.call_args_list:
+            chunk = call.kwargs["logEvents"]
+            chunk_bytes = sum(len(event["message"].encode("utf-8")) + 26 for event in chunk)
+            self.assertLessEqual(chunk_bytes, 1048576)
+
+        client.update_last_seen_ts.assert_called_once_with(timestamp)
+
     def test_send_logs_to_cloudwatch_missing_log_group(self):
         """Test handling of missing log group."""
         client.output.write("time=2025-01-01T10:30:45 msg=test\n")
