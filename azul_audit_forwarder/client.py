@@ -6,7 +6,6 @@ Sends logs to a specified destination at a configurable interval.
 
 import copy
 import io
-import math
 import os.path
 import re
 import threading
@@ -161,17 +160,37 @@ def send_logs_to_cloudwatch(last_epoch: int):
             # Sort log events by timestamp
             log_events.sort(key=lambda x: x["timestamp"])
 
-            # CloudWatch enforces a 10,000 event limit per put_log_events call
+            # CloudWatch sets a 10,000 event limit per put_log_events call, and a
+            # 1,048,576 byte limit for each message plus 26 bytes
             CLOUDWATCH_MAX_EVENTS = 10000
-            num_chunks = math.ceil(len(log_events) / CLOUDWATCH_MAX_EVENTS)
-            logger.info(f"Sending {len(log_events)} logs to CloudWatch in {num_chunks} chunks.")
+            CLOUDWATCH_MAX_BATCH_BYTES = 1048576
+            CLOUDWATCH_EVENT_OVERHEAD_BYTES = 26
 
-            for i in range(0, len(log_events), CLOUDWATCH_MAX_EVENTS):
-                chunk = log_events[i : i + CLOUDWATCH_MAX_EVENTS]
+            # Build chunks that respect the event count and byte size limits
+            chunks = []
+            current_chunk = []
+            current_bytes = 0
+            for event in log_events:
+                event_bytes = len(event["message"].encode("utf-8")) + CLOUDWATCH_EVENT_OVERHEAD_BYTES
+                if current_chunk and (
+                    len(current_chunk) >= CLOUDWATCH_MAX_EVENTS
+                    or current_bytes + event_bytes > CLOUDWATCH_MAX_BATCH_BYTES
+                ):
+                    chunks.append(current_chunk)
+                    current_chunk = []
+                    current_bytes = 0
+                current_chunk.append(event)
+                current_bytes += event_bytes
+            if current_chunk:
+                chunks.append(current_chunk)
+
+            logger.info(f"Sending {len(log_events)} logs to CloudWatch in {len(chunks)} chunks.")
+
+            for chunk in chunks:
                 response = cloudwatch_client.put_log_events(
                     logGroupName=log_group, logStreamName=log_stream, logEvents=chunk
                 )
-                logger.debug(f"Cloudwatch Put log events response: {response}")
+                logger.info(f"Cloudwatch Put log events response: {response}")
                 if response.get("ResponseMetadata", {}).get("HTTPStatusCode") != 200:
                     logger.error("Failed to send logs to CloudWatch.")
                     return
