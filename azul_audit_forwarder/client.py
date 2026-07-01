@@ -28,6 +28,8 @@ output = io.StringIO()
 LOKI_LIMIT = 5000
 MAX_WINDOW_SECS = 5 * 60  # 5 minutes
 MIN_WINDOW_SECS = 0.25  # 250 ms
+# Flush the buffer to the destination once it grows larger than 4MB
+FLUSH_THRESHOLD_BYTES = 4 * 1024 * 1024
 
 if settings.st.send_logs_to == settings.SendLogsDestination.CLOUDWATCH:
     cloudwatch_kwargs = {
@@ -273,6 +275,15 @@ def process_logs(content: dict) -> None:
     output.flush()
 
 
+def flush_logs(last_epoch: int) -> None:
+    """Send any buffered logs to the configured destination and persist progress."""
+    if settings.st.send_logs_to == settings.SendLogsDestination.CLOUDWATCH:
+        send_logs_to_cloudwatch(last_epoch)
+    else:
+        # Send logs to target endpoint if cloudwatch forwarding is not enabled
+        send_logs(last_epoch)
+
+
 def poll_for_logs() -> tuple[int | None, bool]:
     """Poll for logs from Loki using dynamic time windows.
 
@@ -334,6 +345,10 @@ def poll_for_logs() -> tuple[int | None, bool]:
                 current_start = current_end
                 window_failures = 0
 
+                # Clear the buffer incrementally so it does not accumulate and OOM the pod
+                if output.tell() >= FLUSH_THRESHOLD_BYTES:
+                    flush_logs(int(current_end))
+
                 if num_returned < LOKI_LIMIT:
                     # Under the limit; double the window.
                     window_secs = min(window_secs * 2, MAX_WINDOW_SECS)
@@ -364,11 +379,8 @@ def poll_and_send_logs() -> bool:
     """Poll for logs from Loki and send to host specified in settings."""
     last_epoch, hit_limit = poll_for_logs()
     if last_epoch:
-        if settings.st.send_logs_to == settings.SendLogsDestination.CLOUDWATCH:
-            send_logs_to_cloudwatch(last_epoch)
-        else:
-            # Send logs to target endpoint if cloudwatch forwarding is not enabled
-            send_logs(last_epoch)
+        # Flush the buffer
+        flush_logs(last_epoch)
     return hit_limit
 
 
