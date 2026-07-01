@@ -304,7 +304,7 @@ def poll_for_logs() -> tuple[int | None, bool]:
         current_end = min(current_start + window_secs, cutoff)
 
         params = {
-            "query": f'{{app="restapi-server-audit"}} | namespace = `{settings.st.azul_namespace}` | username != `-`',
+            "query": f'{{app="restapi-server-audit"}} != `kube-probe` | namespace = `{settings.st.azul_namespace}` | username != `-`',
             "limit": LOKI_LIMIT,
             "start": current_start,
             "end": current_end,
