@@ -38,6 +38,12 @@ class AuditFwdSettings(BaseSettings):
     # azul namespace to forward logs for
     azul_namespace: str = "azul"
 
+    # Substrings that cause a log line to be dropped before forwarding. Matching happens
+    # server-side in Loki via line filters, so these lines are never fetched. Defaults to
+    # excluding Kubernetes health-check requests (user_agent="kube-probe/..."). Override with
+    # the AUDIT_EXCLUDED_LOG_SUBSTRINGS env var as a JSON list, e.g. '["kube-probe", "GET /healthz"]'.
+    excluded_log_substrings: list[str] = ["kube-probe"]
+
     # To send logs to a target endpoint, send_logs_to must be set to 'server'.
     # Target_host should be `http://audit-server:9999` in a Prod environment
     server_target_endpoint: str | None = None

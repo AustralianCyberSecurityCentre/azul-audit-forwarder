@@ -300,11 +300,14 @@ def poll_for_logs() -> tuple[int | None, bool]:
     hit_limit = False
     window_failures = 0
 
+    # Drop unwanted log lines (e.g. kube-probe health checks)
+    exclude_filters = "".join(f" != `{substring}`" for substring in settings.st.excluded_log_substrings)
+
     while current_start < cutoff:
         current_end = min(current_start + window_secs, cutoff)
 
         params = {
-            "query": f'{{app="restapi-server-audit"}} != `kube-probe` | namespace = `{settings.st.azul_namespace}` | username != `-`',
+            "query": f'{{app="restapi-server-audit"}}{exclude_filters} | namespace = `{settings.st.azul_namespace}` | username != `-`',
             "limit": LOKI_LIMIT,
             "start": current_start,
             "end": current_end,
