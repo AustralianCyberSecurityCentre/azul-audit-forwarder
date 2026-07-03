@@ -39,8 +39,8 @@ class AuditFwdSettings(BaseSettings):
     azul_namespace: str = "azul"
 
     # Substrings that cause a log line to be dropped before forwarding. Defaults to
-    # excluding Kubernetes health-check requests
-    excluded_log_substrings: list[str] = ["kube-probe"]
+    # excluding Kubernetes health-check requests.
+    excluded_log_substrings: list[str] = ['user_agent="kube-probe']
 
     # To send logs to a target endpoint, send_logs_to must be set to 'server'.
     # Target_host should be `http://audit-server:9999` in a Prod environment
