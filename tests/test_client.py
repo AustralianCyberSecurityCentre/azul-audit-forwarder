@@ -213,6 +213,31 @@ class TestNoServer(unittest.TestCase):
         self.assertEqual(expected_log, processed_logs)
 
 
+class TestExcludedProbe(unittest.TestCase):
+    def setUp(self) -> None:
+        # Ensure the default excluded_log_patterns are set (kube-probe on "/api" and "/")
+        settings.st = settings.AuditFwdSettings()
+
+    def _line(self, path: str, user_agent: str) -> str:
+        return (
+            "full_time=12/Apr/2024:10:00:47.513681 client_ip=127.0.0.6 client_port=53841 "
+            f"connection=- username=USER123 method=GET path={path} status=200 "
+            f'user_agent="{user_agent}" referer=- duration_ms=1.0'
+        )
+
+    def test_kube_probe_on_health_path_is_excluded(self):
+        # kube-probe hitting a configured health-check path is dropped.
+        self.assertTrue(client._is_excluded_probe(self._line("/api", "kube-probe/1.28")))
+
+    def test_real_traffic_is_not_excluded(self):
+        # Normal audit traffic has no probe user-agent, so it is kept.
+        self.assertFalse(client._is_excluded_probe(self._line("/api/v0/binaries/form", "python-httpx/0.27.0")))
+
+    def test_spoofed_user_agent_on_other_path_is_not_excluded(self):
+        # A spoofed kube-probe user-agent is still be audited.
+        self.assertFalse(client._is_excluded_probe(self._line("/admin", "kube-probe/1.28")))
+
+
 class TestProcessLogs(unittest.TestCase):
     mock_server: ClassVar[md.MockDestination]
 
