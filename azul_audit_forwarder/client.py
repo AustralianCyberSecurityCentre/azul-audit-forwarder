@@ -30,6 +30,9 @@ MAX_WINDOW_SECS = 5 * 60  # 5 minutes
 MIN_WINDOW_SECS = 0.25  # 250 ms
 # Flush the buffer to the destination once it grows larger than 4MB
 FLUSH_THRESHOLD_BYTES = 4 * 1024 * 1024
+# Patterns for parsing logs for matching against excluded_log_patterns
+_USER_AGENT_RE = re.compile(r'user_agent="([^"]*)"')
+_PATH_RE = re.compile(r"\bpath=(\S+)")
 
 if settings.st.send_logs_to == settings.SendLogsDestination.CLOUDWATCH:
     cloudwatch_kwargs = {
@@ -262,16 +265,40 @@ def send_logs_after_interval(interval: int):
         time.sleep(MIN_WINDOW_SECS if hit_limit else interval)
 
 
+def _is_excluded_probe(line: str) -> bool:
+    """Return True if the line is a health-check request that should not be forwarded.
+
+    A line is dropped when its real path and user_agent both match a configured
+    ExcludedLogPattern.
+    """
+    patterns = settings.st.excluded_log_patterns
+    # Early check for performance: if the line contains none of the
+    # probe user-agents, skip the regex, return False
+    if not any(p.user_agent in line for p in patterns):
+        return False
+    ua_match = _USER_AGENT_RE.search(line)
+    if ua_match is None:
+        return False
+
+    user_agent = ua_match.group(1)
+    path_match = _PATH_RE.search(line)
+    path = path_match.group(1) if path_match else None
+    return any(path == p.path and user_agent.startswith(p.user_agent) for p in patterns)
+
+
 def process_logs(content: dict) -> None:
     """Process logs returned by the /loki/api/v1/query_range endpoint."""
     num_logs = content["data"]["stats"]["summary"]["totalEntriesReturned"]
     if num_logs <= 0:
         return
 
-    # get all lines
+    # get all lines, dropping health-check probes
     for result in content["data"]["result"]:
         for value in result["values"]:
-            output.write(value[1] + "\n")
+            line = value[1]
+            if _is_excluded_probe(line):
+                continue
+            output.write(line + "\n")
     output.flush()
 
 
@@ -304,6 +331,7 @@ def poll_for_logs() -> tuple[int | None, bool]:
         current_end = min(current_start + window_secs, cutoff)
 
         params = {
+            # Health-check probes are filtered in process_logs
             "query": f'{{app="restapi-server-audit"}} | namespace = `{settings.st.azul_namespace}` | username != `-`',
             "limit": LOKI_LIMIT,
             "start": current_start,

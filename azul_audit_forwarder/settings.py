@@ -2,6 +2,7 @@
 
 from enum import Enum
 
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +12,17 @@ class SendLogsDestination(str, Enum):
     CLOUDWATCH = "cloudwatch"
     SERVER = "server"
     LOG_ONLY = "log_only"
+
+
+class ExcludedLogPattern(BaseModel):
+    """A request path + user_agent pair; audit lines matching both are dropped before forwarding."""
+
+    # matched exactly against the request path (e.g. "/api/openapi.json")
+    path: str
+    # matched as a prefix of the user_agent (e.g. "kube-probe", "Blackbox Exporter")
+    user_agent: str = Field(alias="userAgent")
+
+    model_config = {"populate_by_name": True}
 
 
 class AuditFwdSettings(BaseSettings):
@@ -37,6 +49,14 @@ class AuditFwdSettings(BaseSettings):
     loki_host: str = "http://localhost:3100"
     # azul namespace to forward logs for
     azul_namespace: str = "azul"
+
+    # Path + user_agent pairs matching audit lines are dropped in the forwarder before
+    # forwarding. Defaults to excluding Kubernetes and Blackbox exporter health-check requests.
+    excluded_log_patterns: list[ExcludedLogPattern] = [
+        ExcludedLogPattern(path="/api/openapi.json", user_agent="Blackbox Exporter"),
+        ExcludedLogPattern(path="/api", user_agent="kube-probe"),
+        ExcludedLogPattern(path="/", user_agent="kube-probe"),
+    ]
 
     # To send logs to a target endpoint, send_logs_to must be set to 'server'.
     # Target_host should be `http://audit-server:9999` in a Prod environment
