@@ -174,7 +174,7 @@ def send_logs_to_cloudwatch(last_epoch: int):
             current_chunk = []
             current_bytes = 0
             for event in log_events:
-                event_bytes = len(event["message"].encode("utf-8")) + CLOUDWATCH_EVENT_OVERHEAD_BYTES # ty: ignore[unresolved-attribute] ty thinks event["message"] might be an int since event["timestamp"] is an int
+                event_bytes = len(event["message"].encode("utf-8")) + CLOUDWATCH_EVENT_OVERHEAD_BYTES  # ty: ignore[unresolved-attribute] ty thinks event["message"] might be an int since event["timestamp"] is an int
                 if current_chunk and (
                     len(current_chunk) >= CLOUDWATCH_MAX_EVENTS
                     or current_bytes + event_bytes > CLOUDWATCH_MAX_BATCH_BYTES
